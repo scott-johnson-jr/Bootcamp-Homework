@@ -1,5 +1,3 @@
-import UIKit
-
 // ============================================================
 // MODULE 4: Swift Programming Fundamentals
 // Day 3 Exercises — Protocols, ARC, Optionals, Error Handling
@@ -113,7 +111,6 @@ t1.printDetails()
 // The power: printAll doesn't know or care that the items are Transactions.
 // Any future type that conforms to Displayable works automatically.
 
-
 // ============================================================
 // EXERCISE 2: Protocol-Oriented Design with Dependency Injection
 // Estimated time: 20 minutes
@@ -128,20 +125,39 @@ t1.printDetails()
 // TODO 2a: Define a protocol named AccountDataSource with:
 //   func fetchBalance(for accountId: String) -> Double
 //   func fetchTransactionCount(for accountId: String) -> Int
-
+protocol AccountDataSource {
+    func fetchBalance(for accountId: String) -> Double
+    func fetchTransactionCount(for accountId: String) -> Int
+}
 
 // TODO 2b: Create a struct MockAccountDataSource that conforms to
 // AccountDataSource and returns hardcoded values:
 //   fetchBalance: always returns 4_250.75
 //   fetchTransactionCount: always returns 47
-
+struct MockAccountDataSource: AccountDataSource {
+    func fetchBalance(for accountId: String) -> Double {
+        return 4_250.75
+    }
+    
+    func fetchTransactionCount(for accountId: String) -> Int {
+        return 47
+    }
+}
 
 // TODO 2c: Create a struct LiveAccountDataSource that conforms to
 // AccountDataSource and simulates real behavior:
 //   fetchBalance: returns a random Double between 100 and 50_000
 //   fetchTransactionCount: returns a random Int between 1 and 500
 //   Hint: Double.random(in: 100...50_000)
+struct LiveAccountDataSource: AccountDataSource {
 
+    func fetchBalance(for accountId: String) -> Double {
+        return Double.random(in: 100...50_000)
+    }
+    func fetchTransactionCount(for accountId: String) -> Int {
+        return Int.random(in: 1...500)
+    }
+}
 
 // TODO 2d: Write a class AccountDashboard that:
 //   - Has a stored property dataSource: AccountDataSource (the PROTOCOL — not a concrete type)
@@ -153,8 +169,23 @@ t1.printDetails()
 // one with LiveAccountDataSource. Call showSummary on both.
 // The showSummary method is IDENTICAL for both — only the data source differs.
 // This is the dependency injection pattern you'll use throughout the bootcamp.
+class AccountDashboard {
+    let dataSource: AccountDataSource
 
+    init(dataSource: AccountDataSource) {
+        self.dataSource = dataSource
+    }
+    func showSummary(for accountId: String) {
+        let balance = dataSource.fetchBalance(for: accountId)
+        let transactionCount = dataSource.fetchTransactionCount(for: accountId)
+        print("Account \(accountId): Balance \(String(format: "$%.2f", balance)) | Transactions: \(transactionCount)")
+    }
+}
 
+let mockDashboard = AccountDashboard(dataSource: MockAccountDataSource())
+let liveDashboard = AccountDashboard(dataSource: LiveAccountDataSource())
+mockDashboard.showSummary(for: "Account-01")
+liveDashboard.showSummary(for: "Account-02")
 // ============================================================
 // PART B: AUTOMATIC REFERENCE COUNTING
 // ============================================================
@@ -173,19 +204,29 @@ t1.printDetails()
 // TODO 3a: Create a retain cycle, then fix it.
 // Define two classes:
 //
-//   class Customer {
-//       let name: String
-//       var account: Account?    // optional — set after initialization
-//       init(name: String) { ... }
-//       deinit { print("Customer \(name) deallocated") }
-//   }
-//
-//   class Account {
-//       let number: String
-//       var owner: Customer?     // THIS CREATES THE CYCLE
-//       init(number: String) { ... }
-//       deinit { print("Account \(number) deallocated") }
-//   }
+  class Customer {
+      let name: String
+      var account: Account?
+      init(name: String) {
+            self.name = name
+                }
+      deinit { print("Customer \(name) deallocated") }
+  }
+  class Account {
+      let number: String
+      weak var owner: Customer?     
+      init(number: String) {
+            self.number = number
+                }
+      deinit { print("Account \(number) deallocated") }     
+  }
+        do {
+            let customer = Customer(name: "Jane")
+            let account = Account(number: "ACC-001")
+            customer.account = account
+            account.owner = customer
+        }
+
 //
 // Create instances in a do {} block (so they go out of scope):
 //   do {
@@ -219,6 +260,11 @@ class TransactionProcessor {
     }
 
     func startProcessing() {
+        onComplete = { [weak self] in
+              guard let self = self else { return }
+              print("Processing complete for \(self.accountId)")
+        }
+
         // TODO: Assign a closure to onComplete that captures self WEAKLY.
         // The closure should print "Processing complete for [accountId]"
         // Use [weak self] capture list and guard let self = self inside.
@@ -234,6 +280,12 @@ class TransactionProcessor {
         onComplete?()
     }
 }
+    do {
+      let processor = TransactionProcessor(accountId: "ACC-001")
+      processor.startProcessing()
+      processor.complete()
+    }
+
 
 // TODO: Test in a do {} block:
 //   do {
@@ -274,6 +326,8 @@ let user = UserProfile(name: "Jane Smith", address: Address(
     street: "123 Main St", city: "Columbus", zip: "43001"))
 let userNoAddress = UserProfile(name: "Bob", address: nil)
 
+let zipCode = user.address?.zip
+print(zipCode ?? "No ZIP available")  
 // TODO: Use optional chaining to safely access the zip code.
 // If the zip exists, print "ZIP: [zip]"
 // If any step in the chain is nil, print "No ZIP available"
@@ -290,7 +344,12 @@ let userNoAddress = UserProfile(name: "Bob", address: nil)
 //   "Transfer $X.XX from [sourceId] to [destId] approved"
 // Otherwise print: "Transfer failed: missing required fields"
 
-func transfer(from sourceId: String?, to destId: String?, amount: Double?) {
+func transfer(from sourceId: String?, to destId: String?, amount: Double?) 
+    { if let src = sourceId, let dst = destId, let amt = amount, amt > 0 {
+        print("Transfer $\(amt) from \(src) to \(dst) approved")
+    } else {
+        print("Transfer failed: missing required fields")
+    }
     // TODO: implement with a single multi-binding if let
 }
 
@@ -315,7 +374,12 @@ let nilString: String? = nil
 //   rawBalanceString → Optional("$4250.75")
 //   rawInvalidString → nil
 //   nilString → nil
-
+let formattedCurrency = rawBalanceString.flatMap { Double($0) }.map {String(format: "$%.2f", $0) }
+print(formattedCurrency as Any)
+let rawInvalidCurrency = rawInvalidString.flatMap { Double($0) }.map {String(format: "$%.2f", $0) }
+print(rawInvalidCurrency as Any)
+let nilCurrency = nilString.flatMap { Double($0) }.map {String(format: "$%.2f", $0) }
+print(nilCurrency as Any)
 
 // TODO 4d: Force unwrap — when and ONLY when it's safe
 // There are exactly two situations where ! is acceptable:
@@ -330,6 +394,8 @@ let apiURL = URL(string: "https://api.pnc.com/v1")!
 //   let userURL = URL(string: userInputString)!
 // and what you would do instead.
 
+// it could crash your code if there's any issues with the API since you yourself didn't write it for a programmer error
+// what you should do is do the @IBOoutlets and use a weak on it
 
 // ============================================================
 // PART D: TYPED ERROR HANDLING
@@ -357,7 +423,47 @@ let apiURL = URL(string: "https://api.pnc.com/v1")!
 //
 // Implement var errorDescription: String? using a switch to return
 // a user-facing message for each case.
+enum TransferError: LocalizedError {
+    case invalidAmount
+    case insufficientFunds(available: Double)
+    case accountNotFound(id: String)
+    case dailyLimitExceeded(limit: Double, attempted: Double)
+    case networkUnavailable
 
+    var errorDescription: String? {
+        switch self {
+            case .invalidAmount:
+                return "Amount invalid. Please try again."
+            case .insufficientFunds(available: let avail):
+                return "Funds insufficient. Available: $\(String(format: "%.2f", avail))"
+            case .accountNotFound(id: _):
+                return "Account Not Found, please check credentials."
+            case .dailyLimitExceeded(limit: let lim, attempted: let att):
+                return "Daily transfer limit exceeded. Your limit is: $\(String(format: "%.2f",lim)), Attempted: $\(String(format: "%.2f",att))"
+            case .networkUnavailable:
+                return "Network currently unavailable. Please try again later"
+        }
+    }
+}
+
+func executeTransfer(amount: Double, fromBalance: Double, toAccountId: String, dailyUsed: Double, dailyLimit: Double) throws -> String {
+    guard amount > 0 else {
+        throw TransferError.invalidAmount
+    }
+    guard !toAccountId.isEmpty else {
+        throw TransferError.accountNotFound(id: toAccountId)
+        }    
+    guard amount <= fromBalance else {
+        throw TransferError.insufficientFunds(available: fromBalance)
+        }
+    guard dailyUsed + amount <= dailyLimit else {
+        throw TransferError.dailyLimitExceeded(limit: dailyLimit, attempted: dailyUsed + amount)
+        }
+    guard toAccountId != "ERR_NET" else {
+        throw TransferError.networkUnavailable
+    }
+    return "Transfer of $\(String(format: "%.2f", amount)) to account [\(toAccountId)] complete"
+    }
 
 // TODO 5b: Write a throwing function:
 // func executeTransfer(amount: Double, fromBalance: Double, toAccountId: String,
@@ -371,8 +477,50 @@ let apiURL = URL(string: "https://api.pnc.com/v1")!
 //   (simulate network issue for a specific account id "ERR_NET") → .networkUnavailable
 //
 // On success, return: "Transfer of $X.XX to account [id] complete"
+do {
+    let result = try executeTransfer(amount: -100, fromBalance: 1000, toAccountId: "ACC-002", dailyUsed: 200, dailyLimit: 1000)
+    print(result)
+} catch {
+    print(error.localizedDescription)
+}
 
+do {
+    let result = try executeTransfer(amount: 500, fromBalance: 1000, toAccountId: "ACC-002", dailyUsed: 800, dailyLimit: 1000)
+    print(result)
+} catch {
+    print(error.localizedDescription)
+}
 
+do {
+    let result = try executeTransfer(amount: 1500, fromBalance: 1000, toAccountId: "ACC-002", dailyUsed: 200, dailyLimit: 1000)
+    print(result)
+} catch {
+    print(error.localizedDescription)
+}
+do {
+    let result = try executeTransfer(amount: 500, fromBalance: 1000, toAccountId: "ERR_NET", dailyUsed: 100, dailyLimit: 1000)
+    print(result)
+} catch {
+    print(error.localizedDescription)
+}
+do {
+    let result = try executeTransfer(amount: 200, fromBalance: 1000, toAccountId: "", dailyUsed: 200, dailyLimit: 1000)
+    print(result)
+} catch {
+    print(error.localizedDescription)
+}
+
+do {
+    let result = try? executeTransfer(amount: -100, fromBalance: 1000, toAccountId: "ACC-002", dailyUsed: 200, dailyLimit: 1000)
+
+print(result ?? "Transfer failed")
+}
+do {
+    let result = try? executeTransfer(amount: 100, fromBalance: 1000, toAccountId: "ACC-002", dailyUsed: 100, dailyLimit: 1000)
+
+print(result ?? "Transfer failed")
+
+ }
 // TODO 5c: Handle all error cases
 // Call executeTransfer five times — once for each error case and once for success.
 // Use a do-catch block that handles each specific TransferError case.
@@ -382,7 +530,7 @@ let apiURL = URL(string: "https://api.pnc.com/v1")!
 // TODO 5d: try? — silently converting failure to nil
 // Sometimes you don't need to know WHY something failed.
 // Convert a throwing call to an optional with try?
-//
+
 // let result = try? executeTransfer(amount: -100, ...)
 // result will be nil if it threw, or the String value if it succeeded.
 // Print result using nil coalescing: result ?? "Transfer failed"
@@ -408,6 +556,53 @@ let apiURL = URL(string: "https://api.pnc.com/v1")!
 // that takes an array of any type T and prints the first element,
 // or "Array is empty" if it has no elements.
 // Test with: [Int], [String], [Double]
+func printFirst<T>(_ arr: [T]) -> T? {
+    return arr.first
+}
+
+struct Stack<T> {
+    private var items: [T] = []
+    
+    mutating func push(_ item: T) {
+        items.append(item)
+    }
+    
+    mutating func pop() -> T? {
+        return items.popLast()
+    }
+    
+    var top: T? {
+        return items.last
+    }
+    
+    var isEmpty: Bool {
+        return items.isEmpty
+    }
+    
+    var count: Int {
+        return items.count
+    }
+
+}
+
+var transactionHistory = Stack<Double>()
+transactionHistory.push(250.00)
+transactionHistory.push(45.67)
+transactionHistory.push(1200.00)
+print(transactionHistory.pop() ?? 0.0)
+print(transactionHistory.top ?? 0.0)
+print(transactionHistory.count)
+
+func findLargest<T: Comparable>(_ arr: [T]) -> T? {
+    return arr.max()
+}
+
+print(findLargest([12, 44, 121, 3, 1]) ?? "none" )
+print(findLargest([2.2, 12.6, 30.1]) ?? "none")
+print(findLargest(["watermelon", "banana", "apple", "orange"]) ?? "none")
+
+
+
 
 
 // TODO 6b: Generic Stack
